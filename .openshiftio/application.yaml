@@ -1,0 +1,362 @@
+objects:
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: screeching-scale
+    name: openjdk18-openshift
+  spec:
+    lookupPolicy:
+      local: false
+    tags:
+    - from:
+        kind: DockerImage
+        name: registry.access.redhat.com/redhat-openjdk-18/openjdk18-openshift
+      generation: null
+      importPolicy: {}
+      name: latest
+      referencePolicy:
+        type: ''
+  status:
+    dockerImageRepository: ''
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: screeching-scale
+    name: screeching-scale
+  spec:
+    lookupPolicy:
+      local: false
+  status:
+    dockerImageRepository: ''
+- apiVersion: build.openshift.io/v1
+  kind: BuildConfig
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: screeching-scale
+    name: screeching-scale
+  spec:
+    nodeSelector: null
+    output:
+      to:
+        kind: ImageStreamTag
+        name: screeching-scale:latest
+    postCommit: {}
+    resources: {}
+    source:
+      git:
+        uri: ${SOURCE_REPOSITORY_URL}
+      type: Git
+    strategy:
+      sourceStrategy:
+        from:
+          kind: ImageStreamTag
+          name: openjdk18-openshift:latest
+        incremental: true
+        env:
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: screeching-scale-database-bind
+              key: uri
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: screeching-scale-database-bind
+              key: user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: screeching-scale-database-bind
+              key: password
+      type: Source
+    triggers:
+    - type: GitHub
+      github:
+        secret: ${GITHUB_WEBHOOK_SECRET}
+    - type: ConfigChange
+    - type: ImageChange
+      imageChange: {}
+  status:
+    lastVersion: 0
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: screeching-scale
+    name: screeching-scale
+  spec:
+    replicas: 1
+    selector:
+      app: screeching-scale
+      deploymentconfig: screeching-scale
+    strategy:
+      resources: {}
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: screeching-scale
+          deploymentconfig: screeching-scale
+      spec:
+        containers:
+        - image: screeching-scale:latest
+          name: screeching-scale
+          ports:
+          - containerPort: 8778
+            protocol: TCP
+          - containerPort: 8080
+            protocol: TCP
+          - containerPort: 8443
+            protocol: TCP
+          resources:
+            limits:
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 120
+            timeoutSeconds: 3
+          env:
+          - name: DB_HOST
+            valueFrom:
+              secretKeyRef:
+                name: screeching-scale-database-bind
+                key: uri
+          - name: DB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: screeching-scale-database-bind
+                key: user
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: screeching-scale-database-bind
+                key: password
+    test: false
+    triggers:
+    - type: ConfigChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - screeching-scale
+        from:
+          kind: ImageStreamTag
+          name: screeching-scale:latest
+      type: ImageChange
+  status:
+    availableReplicas: 0
+    latestVersion: 0
+    observedGeneration: 0
+    replicas: 0
+    unavailableReplicas: 0
+    updatedReplicas: 0
+- apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: screeching-scale
+    name: screeching-scale
+  spec:
+    ports:
+    - name: 8080-tcp
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+    - name: 8443-tcp
+      port: 8443
+      protocol: TCP
+      targetPort: 8443
+    - name: 8778-tcp
+      port: 8778
+      protocol: TCP
+      targetPort: 8778
+    selector:
+      app: screeching-scale
+      deploymentconfig: screeching-scale
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: Route
+  metadata:
+    name: screeching-scale
+    labels:
+      app: screeching-scale
+  spec:
+    port:
+      targetPort: 8080-tcp
+    to:
+      kind: Service
+      name: screeching-scale
+- kind: Secret
+  apiVersion: v1
+  metadata:
+    name: screeching-scale-database-bind
+    labels:
+      app: screeching-scale
+  stringData:
+    uri: screeching-scale-database
+    database: my_data
+    user: dbuser
+    password: secret
+- apiVersion: image.openshift.io/v1
+  generation: 0
+  image:
+    dockerImageLayers: null
+    dockerImageMetadata:
+      ContainerConfig: {}
+      Created: null
+      Id: ''
+      apiVersion: '1.0'
+      kind: DockerImage
+    dockerImageMetadataVersion: '1.0'
+    metadata:
+      creationTimestamp: null
+  kind: ImageStreamTag
+  lookupPolicy:
+    local: false
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: screeching-scale
+    name: screeching-scale-database:latest
+  tag:
+    annotations: null
+    from:
+      kind: DockerImage
+      name: 172.30.1.1:5000/openshift/postgresql:latest
+    generation: null
+    importPolicy: {}
+    name: latest
+    referencePolicy:
+      type: ''
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: screeching-scale
+    name: screeching-scale-database
+  spec:
+    replicas: 1
+    selector:
+      app: screeching-scale
+      deploymentconfig: screeching-scale-database
+    strategy:
+      resources: {}
+    template:
+      metadata:
+        creationTimestamp: null
+        labels:
+          app: screeching-scale
+          deploymentconfig: screeching-scale-database
+      spec:
+        containers:
+        - image: 172.30.1.1:5000/openshift/postgresql:latest
+          name: screeching-scale-database
+          ports:
+          - containerPort: 5432
+            protocol: TCP
+          resources:
+            limits:
+              cpu: '1'
+              memory: 512Mi
+          volumeMounts:
+          - mountPath: /var/lib/pgsql/data
+            name: screeching-scale-database-volume-1
+          readinessProbe:
+            initialDelaySeconds: 5
+            exec:
+              command:
+              - /usr/libexec/check-container
+          livenessProbe:
+            initialDelaySeconds: 120
+            exec:
+              command:
+              - /usr/libexec/check-container
+              - --live
+          env:
+          - name: POSTGRESQL_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: screeching-scale-database-bind
+                key: database
+          - name: POSTGRESQL_USER
+            valueFrom:
+              secretKeyRef:
+                name: screeching-scale-database-bind
+                key: user
+          - name: POSTGRESQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: screeching-scale-database-bind
+                key: password
+        volumes:
+        - emptyDir: {}
+          name: screeching-scale-database-volume-1
+    test: false
+    triggers:
+    - type: ConfigChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - screeching-scale-database
+        from:
+          kind: ImageStreamTag
+          name: postgresql:latest
+          namespace: openshift
+      type: ImageChange
+  status:
+    availableReplicas: 0
+    latestVersion: 0
+    observedGeneration: 0
+    replicas: 0
+    unavailableReplicas: 0
+    updatedReplicas: 0
+- apiVersion: v1
+  kind: Service
+  metadata:
+    creationTimestamp: null
+    labels:
+      app: screeching-scale
+    name: screeching-scale-database
+  spec:
+    ports:
+    - name: 5432-tcp
+      port: 5432
+      protocol: TCP
+      targetPort: 5432
+    selector:
+      app: screeching-scale
+      deploymentconfig: screeching-scale-database
+  status:
+    loadBalancer: {}
+parameters:
+- name: SOURCE_REPOSITORY_URL
+  description: The source URL for the application
+  displayName: Source URL
+  value: https://github.com/dummy_org/dummy_repo
+  required: true
+- name: GITHUB_WEBHOOK_SECRET
+  description: The secret used to configure a GitHub webhook
+  displayName: GitHub Webhook Secret
+  required: true
+  from: '[a-zA-Z0-9]{40}'
+  generate: expression
+apiVersion: template.openshift.io/v1
+kind: Template
